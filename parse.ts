@@ -47,15 +47,18 @@ function extractPSXPointerAndGetOffset( offset: number ) {
 
 const PSX_MEM = fs.readFileSync( 'psx.cem' )
 
-const MODEL_START = extractPSXPointerAndGetOffset( extractPSXPointerAndGetOffset( 0x19EE6C ) + 0x58 )
-const MODEL_PARTS_START = extractPSXPointerAndGetOffset( 0x19EE8C )
+const SELECTED_SHIP = extractPSXPointerAndGetOffset( 0x1A75A8 )
+const SHIP = extractPSXPointerAndGetOffset( SELECTED_SHIP + 0x40 )
+
+const MODEL = extractPSXPointerAndGetOffset( SHIP + 0x58 )
+const MODEL_PARTS = extractPSXPointerAndGetOffset( SELECTED_SHIP + 0x60 )
 const MODEL_PART_SIZE = 0x60
 
 function parseModel( offset, index ) {
 
     console.log( `parsing model with index ${index}, offset ${offset}` )
 
-    const MODEL_PART_START = MODEL_PARTS_START + MODEL_PART_SIZE * index
+    const MODEL_PART_START = MODEL_PARTS + MODEL_PART_SIZE * index
     const PARENT_MODEL_PART_START = extractPSXPointerAndGetOffset( MODEL_PART_START + 0x10 )
 
     const PARENT_INDEX = index === 0 ? undefined : PSX_MEM.readInt32LE( PARENT_MODEL_PART_START + 0x8 )
@@ -130,7 +133,7 @@ function parseModel( offset, index ) {
     }
 }
 
-parseModel( MODEL_START, 0 )
+parseModel( MODEL, 0 )
 
 function writeModel() {
     let fileContents = `o Object\n`
