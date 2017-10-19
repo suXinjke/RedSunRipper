@@ -22,6 +22,7 @@ interface Face {
 interface ModelPart {
     index: number,
     origin: Vector,
+    reflection: Vector,
 
     vertexes: Vertex[],
     faces: Face[]
@@ -70,6 +71,11 @@ function parseModel( offset, index ) {
             y: PSX_MEM.readInt32LE( MODEL_PART_START + 0x34 ) * SCALE,
             z: PSX_MEM.readInt32LE( MODEL_PART_START + 0x38 ) * SCALE
         },
+        reflection: {
+            x: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x1C ) >= 0 ? 1 : -1,
+            y: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x1E ) >= 0 ? 1 : -1,
+            z: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x2C ) >= 0 ? 1 : -1
+        },
         faces: [],
         vertexes: []
     }
@@ -86,9 +92,9 @@ function parseModel( offset, index ) {
     
     for ( let i = 0 ; i < AMOUNT_OF_VERTEXES * VERTEX_SIZE ; i += VERTEX_SIZE ) {
         modelPart.vertexes.push( {
-            x: PSX_MEM.readInt16LE( VERTEX_OFFSET + i ) * SCALE,
-            y: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 2 ) * SCALE,
-            z: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 4 ) * SCALE
+            x: PSX_MEM.readInt16LE( VERTEX_OFFSET + i ) * SCALE * modelPart.reflection.x,
+            y: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 2 ) * SCALE * modelPart.reflection.y,
+            z: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 4 ) * SCALE * modelPart.reflection.z
         } )
     }
 
