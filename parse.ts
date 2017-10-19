@@ -47,17 +47,13 @@ function extractPSXPointerAndGetOffset( offset: number ) {
 
 const PSX_MEM = fs.readFileSync( 'psx.cem' )
 
-const MODEL_POINTER = 0x19EE6C
+const MODEL_START = extractPSXPointerAndGetOffset( extractPSXPointerAndGetOffset( 0x19EE6C ) + 0x58 )
 const MODEL_PARTS_START = extractPSXPointerAndGetOffset( 0x19EE8C )
 const MODEL_PART_SIZE = 0x60
 
-const MODEL_START = PSXPointerToOffset( extractPSXPointer( MODEL_POINTER ) ) + 0x22c
-
-const MODEL_INDEX_TO_RIP = 0
-
 function parseModel( offset, index ) {
 
-
+    console.log( `parsing model with index ${index}, offset ${offset}` )
 
     const MODEL_PART_START = MODEL_PARTS_START + MODEL_PART_SIZE * index
     const PARENT_MODEL_PART_START = extractPSXPointerAndGetOffset( MODEL_PART_START + 0x10 )
@@ -100,7 +96,7 @@ function parseModel( offset, index ) {
         const header = PSX_MEM.readInt16LE( j )
 
         modelPart.faces.push( {
-            vertexes: header === 3128 ? 3 : 4,
+            vertexes: [ 3128, 18785, 2336 ].indexOf( header ) !== -1 ? 3 : 4,
             header,
             v1: PSX_MEM.readInt16LE( j + 2 ),
             v2: PSX_MEM.readInt16LE( j + 4 ),
@@ -112,8 +108,16 @@ function parseModel( offset, index ) {
             j += 30;
         } else if ( header === 3128 ) {
             j += 24;
-        } else {
+        } else if ( header === 19301 ) {
             j += 22;
+        } else if ( header === 18785 ) {
+            j += 18;
+        } else if ( header === 2336 ) {
+            j += 18;
+        } else if ( header === 2852 ) {
+            j += 22;
+        } else {
+            throw new Error( `Weird face with header ${header}` )
         }
     }
 
@@ -134,7 +138,6 @@ function writeModel() {
     let vertex_offset = 0;
 
     modelParts.forEach( modelPart => {
-        console.log( modelPart.index, modelPart.origin )
         const { vertexes, faces } = modelPart
 
         fileContents += vertexes.reduce( ( result, elem ) => {
