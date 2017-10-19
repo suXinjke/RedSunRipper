@@ -99,7 +99,7 @@ function parseModel( offset, index ) {
         const header = PSX_MEM.readInt16LE( j )
 
         modelPart.faces.push( {
-            vertexes: [ 3128, 18785, 2336 ].indexOf( header ) !== -1 ? 3 : 4,
+            vertexes: [ 3128, 18785, 2336, 3193 ].indexOf( header ) !== -1 ? 3 : 4,
             header,
             v1: PSX_MEM.readInt16LE( j + 2 ),
             v2: PSX_MEM.readInt16LE( j + 4 ),
@@ -119,8 +119,14 @@ function parseModel( offset, index ) {
             j += 18;
         } else if ( header === 2852 ) {
             j += 22;
+        } else if ( header === -28868 ) {
+            j += 30
+        } else if ( header === 3965 ) {
+            j += 30
+        } else if ( header === 3193 ) {
+            j += 24
         } else {
-            throw new Error( `Weird face with header ${header}` )
+            throw new Error( `Weird face with header ${header}, address is ${ j.toString( 16 ) }` )
         }
     }
 
