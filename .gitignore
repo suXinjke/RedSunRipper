@@ -1,0 +1,4 @@
+*.cem
+*.obj
+*.js
+node_modules
