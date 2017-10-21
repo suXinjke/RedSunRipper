@@ -1,6 +1,11 @@
 import fs = require( 'fs' )
 
-interface Pixel {
+export interface Pixel {
+    red: number,
+    green: number,
+    blue: number,
+    transparent: boolean,
+
     clut1: number,
     clut2: number,
     clut3: number,
@@ -26,10 +31,16 @@ export function parseSaveState( filePath: string ): SaveState {
             const offset = i + ( j * VRAM_WIDTH_IN_BYTES )
             const pixel = VRAM_BUFFER.slice( offset, offset + 2 )
 
+            const bytes = pixel.readUInt16LE( 0 )
             const byte1 = pixel.readUInt8( 0 )
             const byte2 = pixel.readUInt8( 1 )
 
             row.push( {
+                red: bytes & 0x1F,
+                green: ( bytes >> 5 ) & 0x1f,
+                blue: ( bytes >> 10 ) & 0x1f,
+                transparent: Boolean( ( bytes >> 15 ) ),
+
                 clut1: byte1 & 0x0f,
                 clut2: byte1 >> 4,
                 clut3: byte2 & 0x0f,

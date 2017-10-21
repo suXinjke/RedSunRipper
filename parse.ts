@@ -1,4 +1,3 @@
-import fs = require( 'fs' )
 import { extractPSXPointer, extractPSXPointerAndGetOffset } from './util'
 
 interface Vector {
@@ -132,7 +131,7 @@ export function parseShip( PSX_MEM: Buffer ): ModelPart[] {
     return modelParts
 }
 
-export function writeModel( modelParts: ModelPart[], SCALE: number = 1 ) {
+export function modelPartsToObjFile( modelParts: ModelPart[], SCALE: number = 1 ): string {
     
     let vertex_offset = 0;
     let fileContents = ''
@@ -165,5 +164,5 @@ export function writeModel( modelParts: ModelPart[], SCALE: number = 1 ) {
         vertex_offset += modelPart.vertexes.length
     } )
     
-    fs.writeFileSync( "out.obj", fileContents );
+    return fileContents
 }
