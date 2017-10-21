@@ -1,6 +1,5 @@
-const SCALE = 0.05;
-
 import fs = require( 'fs' )
+import { extractPSXPointer, extractPSXPointerAndGetOffset } from './util'
 
 interface Vector {
     x: number,
@@ -21,85 +20,54 @@ interface Face {
 
 interface ModelPart {
     index: number,
-    origin: Vector,
+    next_model: number,
+    parent_index: number,
+    origin_rel_to_parent: Vector,
     reflection: Vector,
 
     vertexes: Vertex[],
     faces: Face[]
 }
 
-const modelParts: ModelPart[] = []
+function parseModel( PSX_MEM: Buffer, modelOffset: number, modelPartsOffset: number, index: number = 0 ): ModelPart {
 
-function PSXPointerToOffset( slice: Buffer | number ) {
-    if ( typeof slice === 'number' ) {
-        slice = Buffer.from( slice.toString( 16 ) )
-    }
+    console.log( `parsing model with index ${index}, offset ${modelOffset}` )
 
-    return Number( `0x${slice.swap32().toString( 'hex', 1, 4 )}` )
-}
-
-function extractPSXPointer( offset: number ) {
-    return PSX_MEM.slice( offset, offset + 4 )
-}
-
-function extractPSXPointerAndGetOffset( offset: number ) {
-    return PSXPointerToOffset( extractPSXPointer( offset ) )
-}
-
-const PSX_MEM = fs.readFileSync( 'psx.cem' )
-
-const SELECTED_SHIP = extractPSXPointerAndGetOffset( 0x1A75A8 )
-const SHIP = extractPSXPointerAndGetOffset( SELECTED_SHIP + 0x40 )
-
-const MODEL = extractPSXPointerAndGetOffset( SHIP + 0x58 )
-const MODEL_PARTS = extractPSXPointerAndGetOffset( SELECTED_SHIP + 0x60 )
-const MODEL_PART_SIZE = 0x60
-
-function parseModel( offset, index ) {
-
-    console.log( `parsing model with index ${index}, offset ${offset}` )
-
-    const MODEL_PART_START = MODEL_PARTS + MODEL_PART_SIZE * index
-    const PARENT_MODEL_PART_START = extractPSXPointerAndGetOffset( MODEL_PART_START + 0x10 )
-
+    const PARENT_MODEL_PART_START = extractPSXPointerAndGetOffset( PSX_MEM, modelPartsOffset + 0x10 )
     const PARENT_INDEX = index === 0 ? undefined : PSX_MEM.readInt32LE( PARENT_MODEL_PART_START + 0x8 )
 
     const modelPart: ModelPart = {
         index,
-        origin: {
-            x: PSX_MEM.readInt32LE( MODEL_PART_START + 0x30 ) * SCALE,
-            y: PSX_MEM.readInt32LE( MODEL_PART_START + 0x34 ) * SCALE,
-            z: PSX_MEM.readInt32LE( MODEL_PART_START + 0x38 ) * SCALE
+        parent_index: index === 0 ? undefined : PSX_MEM.readInt32LE( PARENT_MODEL_PART_START + 0x8 ),
+        next_model: extractPSXPointerAndGetOffset( PSX_MEM, modelOffset ),
+        origin_rel_to_parent: {
+            x: PSX_MEM.readInt32LE( modelPartsOffset + 0x30 ),
+            y: PSX_MEM.readInt32LE( modelPartsOffset + 0x34 ),
+            z: PSX_MEM.readInt32LE( modelPartsOffset + 0x38 )
         },
         reflection: {
-            x: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x1C ) >= 0 ? 1 : -1,
-            y: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x1E ) >= 0 ? 1 : -1,
-            z: index === 0 || PSX_MEM.readInt16LE( MODEL_PART_START + 0x2C ) >= 0 ? 1 : -1
+            x: index === 0 || PSX_MEM.readInt16LE( modelPartsOffset + 0x1C ) >= 0 ? 1 : -1,
+            y: index === 0 || PSX_MEM.readInt16LE( modelPartsOffset + 0x1E ) >= 0 ? 1 : -1,
+            z: index === 0 || PSX_MEM.readInt16LE( modelPartsOffset + 0x2C ) >= 0 ? 1 : -1
         },
         faces: [],
         vertexes: []
     }
 
-    if ( PARENT_INDEX !== undefined ) {
-        modelPart.origin.x += modelParts[PARENT_INDEX].origin.x;
-        modelPart.origin.y += modelParts[PARENT_INDEX].origin.y;
-        modelPart.origin.z += modelParts[PARENT_INDEX].origin.z;
-    }
-
-    const AMOUNT_OF_VERTEXES = PSX_MEM.readUInt32LE( offset + 0x24 );
-    const VERTEX_OFFSET = extractPSXPointerAndGetOffset( offset + 0x28 );
+    const AMOUNT_OF_VERTEXES = PSX_MEM.readUInt32LE( modelOffset + 0x24 );
+    const VERTEX_OFFSET = extractPSXPointerAndGetOffset( PSX_MEM, modelOffset + 0x28 );
     const VERTEX_SIZE = 8;
     
     for ( let i = 0 ; i < AMOUNT_OF_VERTEXES * VERTEX_SIZE ; i += VERTEX_SIZE ) {
         modelPart.vertexes.push( {
-            x: PSX_MEM.readInt16LE( VERTEX_OFFSET + i ) * SCALE * modelPart.reflection.x,
-            y: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 2 ) * SCALE * modelPart.reflection.y,
-            z: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 4 ) * SCALE * modelPart.reflection.z
+            x: PSX_MEM.readInt16LE( VERTEX_OFFSET + i ) * modelPart.reflection.x,
+            y: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 2 ) * modelPart.reflection.y,
+            z: PSX_MEM.readInt16LE( VERTEX_OFFSET + i + 4 ) * modelPart.reflection.z
         } )
     }
 
-    const AMOUNT_OF_FACES = PSX_MEM.readUInt32LE( offset + 0x34 );
-    const FACE_OFFSET = extractPSXPointerAndGetOffset( offset + 0x3c );
+    const AMOUNT_OF_FACES = PSX_MEM.readUInt32LE( modelOffset + 0x34 );
+    const FACE_OFFSET = extractPSXPointerAndGetOffset( PSX_MEM, modelOffset + 0x3c );
     
     for ( let i = 0, j = FACE_OFFSET ; i < AMOUNT_OF_FACES ; i++ ) {
         const header = PSX_MEM.readInt16LE( j )
@@ -136,27 +104,54 @@ function parseModel( offset, index ) {
         }
     }
 
-    modelParts.push( modelPart )
-
-    const NEXT_MODEL = extractPSXPointerAndGetOffset( offset );
-
-    if ( NEXT_MODEL > 0 ) {
-        parseModel( NEXT_MODEL, index + 1 )
-    }
+    return modelPart
 }
 
-parseModel( MODEL, 0 )
 
-function writeModel() {
-    let fileContents = `o Object\n`
+export function parseShip( PSX_MEM: Buffer ): ModelPart[] {
+    const modelParts: ModelPart[] = []
 
+    const SELECTED_SHIP = extractPSXPointerAndGetOffset( PSX_MEM, 0x1A75A8 )
+    const SHIP = extractPSXPointerAndGetOffset( PSX_MEM, SELECTED_SHIP + 0x40 )
+    const MODEL_PARTS = extractPSXPointerAndGetOffset( PSX_MEM, SELECTED_SHIP + 0x60 )
+
+    let index = 0;
+    let NEXT_MODEL = extractPSXPointerAndGetOffset( PSX_MEM, SHIP + 0x58 )
+    let NEXT_MODEL_PART = MODEL_PARTS;
+
+    while ( NEXT_MODEL ) {
+        const modelPart = parseModel( PSX_MEM, NEXT_MODEL, NEXT_MODEL_PART, index )
+        modelParts.push( modelPart )
+        
+        NEXT_MODEL = modelPart.next_model
+        NEXT_MODEL_PART += 0x60
+
+        index++;
+    }
+
+    return modelParts
+}
+
+export function writeModel( modelParts: ModelPart[], SCALE: number = 1 ) {
+    
     let vertex_offset = 0;
+    let fileContents = ''
+    
+    modelParts.forEach( ( modelPart, index ) => {
 
-    modelParts.forEach( modelPart => {
+        fileContents += `o Object ${index+1}\n`
+
         const { vertexes, faces } = modelPart
 
         fileContents += vertexes.reduce( ( result, elem ) => {
-            return result + `v ${elem.x + modelPart.origin.x} ${elem.y + modelPart.origin.y} ${elem.z + modelPart.origin.z}\n`
+            let parent = modelParts[modelPart.parent_index]
+            while ( parent !== undefined ) {
+                elem.x += modelPart.origin_rel_to_parent.x;
+                elem.y += modelPart.origin_rel_to_parent.y;
+                elem.z += modelPart.origin_rel_to_parent.z;
+                parent = modelParts[parent.parent_index];
+            }
+            return result + `v ${elem.x * SCALE} ${elem.y * SCALE} ${elem.z * SCALE}\n`
         }, "" )
     
         fileContents += faces.reduce( ( result, elem ) => {
@@ -172,6 +167,3 @@ function writeModel() {
     
     fs.writeFileSync( "out.obj", fileContents );
 }
-
-writeModel()
-
