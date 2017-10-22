@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import * as zlib from 'zlib'
 
 export interface Pixel {
     red: number,
@@ -18,7 +19,17 @@ interface SaveState {
 }
 
 export function parseSaveState( filePath: string ): SaveState {
-    const SAVE_STATE = fs.readFileSync( filePath )
+    let SAVE_STATE = fs.readFileSync( filePath )
+
+    // is that gzip?
+    if ( SAVE_STATE.slice( 0, 3 ).toString( 'hex' ) === '1f8b08' ) {
+        SAVE_STATE = zlib.unzipSync( SAVE_STATE );
+    }
+
+    // is that ePSXe save state?
+    if ( SAVE_STATE.slice( 0, 5 ).toString() !== 'ePSXe' ) {
+        throw new Error( 'Provided file is not an ePSXe save state' )
+    }
 
     const VRAM_BUFFER = SAVE_STATE.slice( 0x2733DF, 0x2733DF + 0x100000 )
     const VRAM_WIDTH_IN_BYTES = 2048
