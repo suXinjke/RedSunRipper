@@ -2,3 +2,4 @@
 *.obj
 *.js
 node_modules
+build

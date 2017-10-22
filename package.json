@@ -1,0 +1,9 @@
+{
+    "name": "redsunripper",
+    "version": "1.0.0",
+    "dependencies": {
+        "@types/node": "^8.0.46",
+        "jimp": "^0.2.28",
+        "typescript": "^2.5.3"
+    }
+}

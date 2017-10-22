@@ -1,4 +1,4 @@
-import jimp = require( 'jimp' )
+import * as jimp from 'jimp'
 import { Pixel } from './sstate'
 
 export function PSXPointerToOffset( PSX_MEM: Buffer, slice: Buffer | number ) {

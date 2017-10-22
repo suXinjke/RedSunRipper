@@ -1,4 +1,4 @@
-import fs = require( 'fs' )
+import * as fs from 'fs'
 
 export interface Pixel {
     red: number,
