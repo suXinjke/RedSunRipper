@@ -34,3 +34,5 @@ You now can go into `build` directory and use the ripper
 cd build
 node main.js my_epsxe_save_state ./output_directory
 ```
+
+# **Added recently**: GAME.RSC extractor
