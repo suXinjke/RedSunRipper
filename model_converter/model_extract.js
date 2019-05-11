@@ -102,7 +102,7 @@ function parseFace( FILE = Buffer.alloc( 0 ), offset = 0 ) {
 
         uv: [ ... new Array( vertex_amount ) ]
             .map( ( _, index ) => {
-                const uv_start = offset + size - 0x8
+                const uv_start = offset + size - vertex_amount * 2
                 return {
                     x: FILE.readUInt8( uv_start + 0x0 + index * 0x2 ),
                     y: FILE.readUInt8( uv_start + 0x1 + index * 0x2 )
