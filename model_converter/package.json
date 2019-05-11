@@ -1,0 +1,11 @@
+{
+  "name": "model_converter",
+  "version": "1.0.0",
+  "main": "model_extract.js",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^12.0.0",
+    "jimp": "^0.6.4"
+  }
+}
