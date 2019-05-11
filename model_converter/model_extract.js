@@ -406,6 +406,7 @@ async function main() {
                     }
 
                     if ( no_inverse_axis === false ) {
+                        x *= -1;
                         y *= -1;
                     }
 
