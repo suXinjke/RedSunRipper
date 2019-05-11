@@ -355,9 +355,13 @@ async function main() {
             let TIM = TIM_FILES[texture_id]
             if ( !TIM ) {
                 const TIM_BUFFER = await fs.readFile( input_texture_file_path )
-                TIM = parseTIM( TIM_BUFFER )
-
-                TIM_FILES[texture_id] = TIM
+                try {
+                    TIM = parseTIM( TIM_BUFFER )
+                    TIM_FILES[texture_id] = TIM
+                } catch ( err ) {
+                    console.log( `Failed to parse ${input_texture_file_path}` )
+                    return null
+                }
             }
 
             return {
@@ -371,6 +375,11 @@ async function main() {
                 TIM
             }
         } ) )
+
+        if ( textures.includes( null ) ) {
+            console.log( `Failed to parse ${model.file_name} due to texture parsing errors` )
+            return
+        }
 
         let OBJ_FILE_CONTENTS = ''
         if ( no_textures === false ) {
