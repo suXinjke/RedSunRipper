@@ -53,9 +53,9 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
                     blue: ( bytes >> 10 ) & 0x1f
                 }
                 const color = {
-                    red: Math.round( ( raw_color.red / 31 ) * 255 ),
-                    green: Math.round( ( raw_color.green / 31 ) * 255 ),
-                    blue: Math.round( ( raw_color.blue / 31 ) * 255 )
+                    red: raw_color.red * 8,
+                    green: raw_color.green * 8,
+                    blue: raw_color.blue * 8
                 }
 
                 const coded = Jimp.rgbaToInt( color.red, color.green, color.blue, 255 )
