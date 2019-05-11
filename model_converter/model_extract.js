@@ -488,6 +488,7 @@ async function main() {
 
                 writeTasks.push( parsedTimToPngBuffer( texture.TIM )
                     .then( PNG_BUFFER => fs.writeFile( texture.output_texture_file_path, PNG_BUFFER ) )
+                    .then( _ => console.log( `Written ${texture.output_texture_file_path}` ) )
                 )
             } )
 
