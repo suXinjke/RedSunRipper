@@ -244,6 +244,8 @@ function parseModel( FILE = Buffer.alloc( 0 ) ) {
     const texture_amount = FILE.readInt32LE( 0x4C )
     const textures_ptr = FILE.readInt32LE( 0x50 )
 
+    const model_face_types = new Set()
+
     const object_amount = FILE.readInt32LE( 0x54 )
     const objects = []
     let object_offset = FILE.readInt32LE( 0x58 )
@@ -253,6 +255,12 @@ function parseModel( FILE = Buffer.alloc( 0 ) ) {
         objects.push( object )
         objects.sort( ( a, b ) => a.object_index < b.object_index ? -1 : 1 )
         object_offset += object.object_size
+
+        object.meshes.forEach( mesh => {
+            mesh.faces.forEach( face => {
+                model_face_types.add( face.type )
+            } )
+        } )
     }
 
     return {
@@ -274,7 +282,8 @@ function parseModel( FILE = Buffer.alloc( 0 ) ) {
 
         object_amount,
 
-        objects
+        objects,
+        model_face_types: [ ...model_face_types ]
     }
 }
 
