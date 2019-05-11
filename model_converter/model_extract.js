@@ -1,6 +1,6 @@
 const fs = require( 'fs' ).promises
 const path = require( 'path' )
-const timToPngBuffer = require( './tim' ).timToPngBuffer
+const { parseTIM, parsedTimToPngBuffer } = require( './tim' )
 
 function formatPointer( num = 0 ) {
     return '0x' + num.toString( 16 ).padStart( 8, '0' )
@@ -91,20 +91,25 @@ function parseFace( FILE = Buffer.alloc( 0 ), offset = 0 ) {
     }
     const { size, quad } = faceType
 
+    const vertex_amount = quad ? 4 : 3
+
     return {
         type: formatPointer( type ),
         offset: formatPointer( offset ),
 
-        vertexes: quad ? [
-            FILE.readInt16LE( offset + 0x2 ),
-            FILE.readInt16LE( offset + 0x4 ),
-            FILE.readInt16LE( offset + 0x6 ),
-            FILE.readInt16LE( offset + 0x8 ),
-        ] : [
-            FILE.readInt16LE( offset + 0x2 ),
-            FILE.readInt16LE( offset + 0x4 ),
-            FILE.readInt16LE( offset + 0x6 ),
-        ],
+        vertexes: [ ... new Array( vertex_amount ) ]
+            .map( ( _, index ) => FILE.readInt16LE( offset + 0x2 * index + 0x2 ) ),
+
+        uv: [ ... new Array( vertex_amount ) ]
+            .map( ( _, index ) => {
+                const uv_start = offset + size - 0x8
+                return {
+                    x: FILE.readUInt8( uv_start + 0x0 + index * 0x2 ),
+                    y: FILE.readUInt8( uv_start + 0x1 + index * 0x2 )
+                }
+            } ),
+
+        texture_index: FILE.readInt32LE( offset + size - vertex_amount * 2 - 0x4 ),
 
         size
     }
@@ -320,12 +325,51 @@ async function main() {
     const no_subdirectories = process.argv.includes( '--no-subdirectories' )
     const no_textures = process.argv.includes( '--no-textures' )
 
+    const TIM_FILES = {}
+
     Promise.all( models.map( async model => {
 
+        let model_output_directory = output_directory
+        if ( no_subdirectories === false ) {
+            model_output_directory = path.join( model_output_directory, model.file_name )
+            await fs.mkdir( model_output_directory, { recursive: true } )
+        }
+
+        const material_file_name = `${model.file_name}.mtl`
+        const textures = await Promise.all( model.data.texture_ids.map( async ( texture_id, index ) => {
+            const input_texture_file_path = path.join( input_texture_directory, `TEX_${texture_id}.TIM` )
+            const output_texture_file_path = path.join( model_output_directory, `tex_${index}.png` )
+
+            let TIM = TIM_FILES[texture_id]
+            if ( !TIM ) {
+                const TIM_BUFFER = await fs.readFile( input_texture_file_path )
+                TIM = parseTIM( TIM_BUFFER )
+
+                TIM_FILES[texture_id] = TIM
+            }
+
+            return {
+                id: texture_id,
+                index,
+                original_texture_file_name: `TEX_${index}.TIM`,
+                converted_texture_file_name: `tex_${index}.png`,
+                material_name: `tex_${index}`,
+                input_texture_file_path,
+                output_texture_file_path,
+                TIM
+            }
+        } ) )
+
         let OBJ_FILE_CONTENTS = ''
+        if ( no_textures === false ) {
+            OBJ_FILE_CONTENTS += `mtllib ${material_file_name}\n`
+        }
+
         const { objects, object_meta } = model.data
 
         let vertex_offset = 0
+        let uv_offset = 0
+        let last_texture_id = -1
         for ( const obj of objects ) {
             const { object_index } = obj
 
@@ -368,18 +412,44 @@ async function main() {
                     OBJ_FILE_CONTENTS += `v ${x} ${y} ${z}\n`
                 }
 
-                for ( const face of mesh.faces ) {
-                    OBJ_FILE_CONTENTS += `f ${face.vertexes.map( v => v + 1 + vertex_offset ).join( ' ' )}\n`
+                let uv_index = uv_offset
+
+                const faces = [ ...mesh.faces ].sort( ( a, b ) => a.texture_index < b.texture_index ? -1 : 1 )
+
+                let uv_string = ''
+                let face_string = ''
+                for ( const face of faces ) {
+                    if ( no_textures ) {
+                        face_string += `f ${face.vertexes.map( v => v + 1 + vertex_offset ).join( ' ' )}\n`
+                    } else {
+                        uv_string += face.uv.map( uv => {
+                            const { TIM } = textures[face.texture_index]
+                            const { width_actual, height } = TIM
+
+                            const x = uv.x / width_actual
+                            const y = 1 - uv.y / height
+
+                            return `vt ${x} ${y}`
+                        } ).join( '\n' ) + '\n'
+
+                        if ( last_texture_id !== face.texture_index ) {
+                            const { material_name } = textures[face.texture_index]
+                            face_string += `usemtl ${material_name}\n`
+
+                            last_texture_id = face.texture_index
+                        }
+
+                        face_string += `f ${face.vertexes.map( ( v, index ) => `${v + 1 + vertex_offset}/${uv_index + index + 1}` ).join( ' ' )}\n`
+                        uv_index += face.vertexes.length
+                    }
                 }
 
-                vertex_offset += mesh.vertexes.length
-            }
-        }
+                OBJ_FILE_CONTENTS += uv_string
+                OBJ_FILE_CONTENTS += face_string
 
-        let model_output_directory = output_directory
-        if ( no_subdirectories === false ) {
-            model_output_directory = path.join( model_output_directory, model.file_name )
-            await fs.mkdir( model_output_directory, { recursive: true } )
+                vertex_offset += mesh.vertexes.length
+                uv_offset += mesh.faces.reduce( ( sum, face ) => sum + face.uv.length, 0 )
+            }
         }
 
         const model_file_path = path.join( model_output_directory, `${model.file_name}.obj` )
@@ -397,14 +467,19 @@ async function main() {
         }
 
         if ( no_textures === false ) {
-            model.data.texture_ids.forEach( ( texture_id, index ) => {
-                const input_texture_file_path = path.join( input_texture_directory, `TEX_${texture_id}.TIM` )
-                const output_texture_file_path = path.join( model_output_directory, `tex_${index}.png` )
-                writeTasks.push( timToPngBuffer( input_texture_file_path )
-                    .then( png => fs.writeFile( output_texture_file_path, png ) )
-                    .then( _ => console.log( `Written ${output_texture_file_path}` ) )
+            let materialFileContents = ''
+
+            textures.forEach( texture => {
+                materialFileContents += `newmtl ${texture.material_name}\n`
+                materialFileContents += `map_Kd ${texture.converted_texture_file_name}\n\n`
+
+                writeTasks.push( parsedTimToPngBuffer( texture.TIM )
+                    .then( PNG_BUFFER => fs.writeFile( texture.output_texture_file_path, PNG_BUFFER ) )
                 )
             } )
+
+            const output_material_file_path = path.join( model_output_directory, material_file_name )
+            writeTasks.push( fs.writeFile( output_material_file_path, materialFileContents ) )
         }
 
         await Promise.all( writeTasks )

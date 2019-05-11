@@ -2,7 +2,7 @@ const fs = require( 'fs' ).promises
 
 const Jimp = require( 'Jimp' )
 
-function parseTIM( FILE = Buffer.alloc( 0 ) ) {
+module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
     const header = FILE.readInt32LE( 0x0 )
     if ( header !== 0x10 ) {
         throw new Error( 'Provided file is not of TIM format' )
@@ -115,13 +115,10 @@ function parseTIM( FILE = Buffer.alloc( 0 ) ) {
     }
 }
 
-module.exports.timToPngBuffer = async function( file_path ) {
-    const TIM_FILE = await fs.readFile( file_path )
+module.exports.parsedTimToPngBuffer = function( TIM ) {
 
-    const result = parseTIM( TIM_FILE )
-
-    const image = new Jimp( result.width_actual, result.height )
-    result.pixels.forEach( ( pixel_row, y ) => {
+    const image = new Jimp( TIM.width_actual, TIM.height )
+    TIM.pixels.forEach( ( pixel_row, y ) => {
         pixel_row.forEach( ( pixel, x ) => {
             image.setPixelColor( pixel.coded, x, y);
         } )
