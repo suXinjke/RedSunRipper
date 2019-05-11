@@ -194,7 +194,10 @@ function parseMesh( FILE = Buffer.alloc( 0 ), offset = 0 ) {
         },
 
         vertexes: [ ...new Array( vertex_amount ) ]
-            .map( ( _, index ) => parseVertex( FILE, vertex_abs_pointer + index * 0x8 ) ),
+            .map( ( _, index ) => ( {
+                index,
+                ...parseVertex( FILE, vertex_abs_pointer + index * 0x8 )
+            } ) ),
 
         faces: faces
     }
