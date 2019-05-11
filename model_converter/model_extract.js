@@ -1,5 +1,6 @@
 const fs = require( 'fs' ).promises
 const path = require( 'path' )
+const timToPngBuffer = require( './tim' ).timToPngBuffer
 
 function formatPointer( num = 0 ) {
     return '0x' + num.toString( 16 ).padStart( 8, '0' )
@@ -273,7 +274,7 @@ const helpMessage =
 `Colony Wars Red Sun Model Converter
 Converts original mesh files into OBJ models
 
-node red_sun_make_obj.js [OPTIONS] <mesh_files_directory> <output_directory>
+node red_sun_make_obj.js [OPTIONS] <mesh_files_directory> <textures_directory> <output_directory>
 
 List of options:
     --model-info        Additonal JSON info on original
@@ -282,25 +283,26 @@ List of options:
                           and translation to model parts
     --no-inverse-axis   Do not invert Y axis
     --no-subdirectories Do not separate output by directories
+    --no-textures       Do not output texture data
 `
 
 async function main() {
-    if ( process.argv.length < 4 ) {
+    if ( process.argv.length < 5 ) {
         console.log( helpMessage )
         return
     }
 
-    const [ input_directory, output_directory ] = process.argv.slice( -2 )
+    const [ input_mesh_directory, input_texture_directory, output_directory ] = process.argv.slice( -3 )
 
     await fs.mkdir( output_directory, { recursive: true } )
 
-    const model_file_names = await fs.readdir( input_directory )
+    const model_file_names = await fs.readdir( input_mesh_directory )
     if ( model_file_names.length === 0 ) {
         throw new Error( 'No model files found in <mesh files directory' )
     }
 
     const models = await Promise.all( model_file_names.map( model_file_name => {
-        const model_file_path = path.join( input_directory, model_file_name )
+        const model_file_path = path.join( input_mesh_directory, model_file_name )
         return fs.readFile( model_file_path )
             .then( data => {
                 const parsed_data = parseModel( data )
@@ -316,6 +318,7 @@ async function main() {
     const no_transform = process.argv.includes( '--no-transform' )
     const no_inverse_axis = process.argv.includes( '--no-inverse-axis' )
     const no_subdirectories = process.argv.includes( '--no-subdirectories' )
+    const no_textures = process.argv.includes( '--no-textures' )
 
     Promise.all( models.map( async model => {
 
@@ -391,6 +394,17 @@ async function main() {
                 .writeFile( model_info_file_path, model_info )
                 .then( _ => console.log( `Written ${model_info_file_path}` ) )
             )
+        }
+
+        if ( no_textures === false ) {
+            model.data.texture_ids.forEach( ( texture_id, index ) => {
+                const input_texture_file_path = path.join( input_texture_directory, `TEX_${texture_id}.TIM` )
+                const output_texture_file_path = path.join( model_output_directory, `tex_${index}.png` )
+                writeTasks.push( timToPngBuffer( input_texture_file_path )
+                    .then( png => fs.writeFile( output_texture_file_path, png ) )
+                    .then( _ => console.log( `Written ${output_texture_file_path}` ) )
+                )
+            } )
         }
 
         await Promise.all( writeTasks )
