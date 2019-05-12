@@ -394,9 +394,13 @@ async function main() {
         for ( const obj of objects ) {
             const { object_index } = obj
 
-            OBJ_FILE_CONTENTS += `o Object_${object_index}\n`
 
-            for ( const mesh of obj.meshes ) {
+            obj.meshes.forEach( ( mesh, mesh_index ) => {
+                let object_string = `o Object_${object_index}`
+                if ( obj.mesh_amount > 1 ) {
+                    object_string += `_${mesh_index}`
+                }
+                OBJ_FILE_CONTENTS += `${object_string}\n`
 
                 for ( const vertex of mesh.vertexes ) {
 
@@ -471,7 +475,7 @@ async function main() {
 
                 vertex_offset += mesh.vertexes.length
                 uv_offset += mesh.faces.reduce( ( sum, face ) => sum + face.uv.length, 0 )
-            }
+            } )
         }
 
         const model_file_path = path.join( model_output_directory, `${model.file_name}.obj` )
