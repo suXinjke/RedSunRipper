@@ -325,7 +325,6 @@ async function main() {
         return fs.readFile( model_file_path )
             .then( data => {
                 const parsed_data = parseModel( data )
-                console.log( `Parsed ${model_file_name}` )
                 return {
                     file_name: model_file_name,
                     data: parsed_data
@@ -362,6 +361,7 @@ async function main() {
                     TIM = parseTIM( TIM_BUFFER )
                     TIM_FILES[texture_id] = TIM
                 } catch ( err ) {
+                    console.log( err )
                     console.log( `Failed to parse ${input_texture_file_path}` )
                     return null
                 }
@@ -490,14 +490,12 @@ async function main() {
         const model_file_path = path.join( model_output_directory, `${model.file_name}.obj` )
         const writeTasks = [ fs
             .writeFile( model_file_path, OBJ_FILE_CONTENTS )
-            .then( _ => console.log( `Written ${model_file_path}` ) )
         ]
         if ( output_model_info ) {
             const model_info_file_path = path.join( model_output_directory, `${model.file_name}.json` )
             const model_info = JSON.stringify( model.data, undefined, 2 )
             writeTasks.push( fs
                 .writeFile( model_info_file_path, model_info )
-                .then( _ => console.log( `Written ${model_info_file_path}` ) )
             )
         }
 
@@ -510,7 +508,6 @@ async function main() {
 
                 writeTasks.push( parsedTimToPngBuffer( texture.TIM )
                     .then( PNG_BUFFER => fs.writeFile( texture.output_texture_file_path, PNG_BUFFER ) )
-                    .then( _ => console.log( `Written ${texture.output_texture_file_path}` ) )
                 )
             } )
 
@@ -519,6 +516,8 @@ async function main() {
         }
 
         await Promise.all( writeTasks )
+
+        console.log( `Sucessfully parsed ${model.file_name}` )
     } ) )
 }
 
