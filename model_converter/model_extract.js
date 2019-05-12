@@ -351,8 +351,10 @@ async function main() {
 
         const material_file_name = `${model.file_name}.mtl`
         const textures = no_textures ? [] : await Promise.all( model.data.texture_ids.map( async ( texture_id, index ) => {
+            const converted_texture_file_name = `${model.file_name}_tex_${index}.png`
+
             const input_texture_file_path = path.join( input_texture_directory, `TEX_${texture_id}.TIM` )
-            const output_texture_file_path = path.join( model_output_directory, `tex_${index}.png` )
+            const output_texture_file_path = path.join( model_output_directory, converted_texture_file_name )
 
             let TIM = TIM_FILES[texture_id]
             if ( !TIM ) {
@@ -371,7 +373,7 @@ async function main() {
                 id: texture_id,
                 index,
                 original_texture_file_name: `TEX_${index}.TIM`,
-                converted_texture_file_name: `tex_${index}.png`,
+                converted_texture_file_name,
                 material_name: `tex_${index}`,
                 input_texture_file_path,
                 output_texture_file_path,
