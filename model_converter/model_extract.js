@@ -301,6 +301,8 @@ List of options:
     --no-inverse-axis   Do not invert Y axis
     --no-subdirectories Do not separate output by directories
     --no-textures       Do not output texture data
+    --no-submeshes      Do not output additional mesh tied to an object,
+                          which are usually Level of Detail meshes
 `
 
 async function main() {
@@ -336,6 +338,7 @@ async function main() {
     const no_inverse_axis = process.argv.includes( '--no-inverse-axis' )
     const no_subdirectories = process.argv.includes( '--no-subdirectories' )
     const no_textures = process.argv.includes( '--no-textures' )
+    const no_submeshes = process.argv.includes( '--no-submeshes' )
 
     const TIM_FILES = {}
 
@@ -397,9 +400,15 @@ async function main() {
 
             obj.meshes.forEach( ( mesh, mesh_index ) => {
                 let object_string = `o Object_${object_index}`
-                if ( obj.mesh_amount > 1 ) {
-                    object_string += `_${mesh_index}`
+
+                if ( mesh_index > 0 ) {
+                    if ( no_submeshes ) {
+                        return
+                    } else {
+                        object_string += `_${mesh_index}`
+                    }
                 }
+
                 OBJ_FILE_CONTENTS += `${object_string}\n`
 
                 for ( const vertex of mesh.vertexes ) {
