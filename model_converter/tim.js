@@ -11,7 +11,7 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
     const type_header = FILE.readInt32LE( 0x4 )
     const type =
         type_header === 0x8 ? '4bpp' :
-        // type_header === 0x9 ? '8bpp' :
+        type_header === 0x9 ? '8bpp' :
         // type_header === 0x2 ? '16bpp' :
         // type_header === 0x3 ? '24bpp' :
         ''
@@ -20,32 +20,29 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
         throw new Error( `Provided file has unknown type header: ${type_header}` )
     }
 
-    const clut_amount = type === '4bpp' ? FILE.readInt16LE( 0x12 ) : 0
-    const clut_size =
-        type === '4bpp' ? 32 :
-        0
-    const clut_total_size = clut_size * clut_amount
-
-    const width =
-        type === '4bpp' ? FILE.readInt16LE( 0x14 + clut_total_size + 0x8 ):
+    const clut_size = FILE.readUInt32LE( 0x8 )
+    const clut_amount = FILE.readUInt16LE( 0x12 )
+    const clut_entries = ( clut_size - 0xC ) / 2
+    const pixel_entries =
+        type === '4bpp' ? 4 :
+        type === '8bpp' ? 2 :
         0
 
+    const width = FILE.readUInt16LE( 0x8 + clut_size + 0x8 )
     const width_actual =
         type === '4bpp' ? width * 4 :
+        type === '8bpp' ? width * 2 :
         0
 
-    const height = type === '4bpp' ?
-        FILE.readInt16LE( 0x14 + clut_total_size + 0xA ) :
-        0
+    const height = FILE.readUInt16LE( 0x8 + clut_size + 0xA )
 
     const cluts = [ ... new Array( clut_amount ) ]
         .map( ( _, index ) => {
 
-            const offset = 0x14 + index * clut_size
+            const offset = 0x14 + index * 0x2
 
             const colors = []
-            const color_count = clut_size / 2
-            for ( let i = 0 ; i < color_count ; i++ ) {
+            for ( let i = 0 ; i < clut_entries ; i++ ) {
                 const bytes = FILE.readInt16LE( offset + i * 0x2 )
                 const raw_color = {
                     red: bytes & 0x1F,
@@ -74,30 +71,31 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
 
         for ( let col = 0 ; col < width ; col++ ) {
 
-            if ( type === '4bpp' ) {
-                const index = col + row * width
+            const index = col + row * width
 
-                const offset = 0x40 + index * 0x2
-                const byte1 = FILE.readUInt8( offset )
-                const byte2 = FILE.readUInt8( offset + 0x1 )
+            const offset = 0x8 + clut_size + 0xC + index * 0x2
+            const byte1 = FILE.readUInt8( offset )
+            const byte2 = FILE.readUInt8( offset + 0x1 )
 
-                const clut_indexes = [
+            const clut_indexes =
+                type === '4bpp' ? [
                     byte1 & 0x0f,
                     byte1 >> 4,
                     byte2 & 0x0f,
                     byte2 >> 4
-                ]
+                ] :
+                type === '8bpp' ? [
+                    byte1,
+                    byte2
+                ] : []
 
-                const pixels = clut_indexes.map( ( clut_index, pixel_index ) => ( {
-                    col: col * 0x4 + pixel_index,
-                    row,
-                    ...cluts[0][clut_index]
-                } ) )
+            const pixels = clut_indexes.map( ( clut_index, pixel_index ) => ( {
+                col: col * pixel_entries + pixel_index,
+                row,
+                ...cluts[0][clut_index]
+            } ) )
 
-                pixel_row.push( ...pixels )
-            } else {
-                return undefined
-            }
+            pixel_row.push( ...pixels )
         }
 
         pixels.push( pixel_row )
@@ -120,7 +118,7 @@ module.exports.parsedTimToPngBuffer = function( TIM ) {
     const image = new Jimp( TIM.width_actual, TIM.height )
     TIM.pixels.forEach( ( pixel_row, y ) => {
         pixel_row.forEach( ( pixel, x ) => {
-            image.setPixelColor( pixel.coded, x, y);
+            image.setPixelColor( pixel.coded, x, y )
         } )
     } )
 
