@@ -1,0 +1,15 @@
+Colony Wars Red Sun Model Converter
+Converts original mesh files into OBJ models
+
+node red_sun_make_obj.js [OPTIONS] <mesh_files_directory> <textures_directory> <output_directory>
+
+List of options:
+    --model-info        Additonal JSON info on original
+                          model will be placed alongside
+    --no-transform      Do not apply scaling, rotation
+                          and translation to model parts
+    --no-inverse-axis   Do not invert Y axis
+    --no-subdirectories Do not separate output by directories
+    --no-textures       Do not output texture data
+    --no-submeshes      Do not output additional mesh tied to an object,
+                          which are usually Level of Detail meshes

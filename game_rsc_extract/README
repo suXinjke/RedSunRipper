@@ -1,0 +1,4 @@
+Colony Wars Red Sun GAME.RSC extractor
+Extracts GAME.RSC contents
+
+node FILE_extract.js <GAME.RSC path> <output_directory>
