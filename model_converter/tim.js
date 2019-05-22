@@ -2,6 +2,43 @@ const fs = require( 'fs' ).promises
 
 const Jimp = require( 'Jimp' )
 
+function rgb2hsv (r, g, b) {
+    let rabs, gabs, babs, rr, gg, bb, h, s, v, diff, diffc, percentRoundFn;
+    rabs = r / 255;
+    gabs = g / 255;
+    babs = b / 255;
+    v = Math.max(rabs, gabs, babs),
+    diff = v - Math.min(rabs, gabs, babs);
+    diffc = c => (v - c) / 6 / diff + 1 / 2;
+    percentRoundFn = num => Math.round(num * 100) / 100;
+    if (diff == 0) {
+        h = s = 0;
+    } else {
+        s = diff / v;
+        rr = diffc(rabs);
+        gg = diffc(gabs);
+        bb = diffc(babs);
+
+        if (rabs === v) {
+            h = bb - gg;
+        } else if (gabs === v) {
+            h = (1 / 3) + rr - bb;
+        } else if (babs === v) {
+            h = (2 / 3) + gg - rr;
+        }
+        if (h < 0) {
+            h += 1;
+        }else if (h > 1) {
+            h -= 1;
+        }
+    }
+    return {
+        h: Math.round(h * 360),
+        s: percentRoundFn(s * 100),
+        v: percentRoundFn(v * 100)
+    };
+}
+
 module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
     const header = FILE.readInt32LE( 0x0 )
     if ( header !== 0x10 ) {
@@ -43,11 +80,12 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
 
             const colors = []
             for ( let i = 0 ; i < clut_entries ; i++ ) {
-                const bytes = FILE.readInt16LE( offset + i * 0x2 )
+                const bytes = FILE.readUInt16LE( offset + i * 0x2 )
                 const raw_color = {
                     red: bytes & 0x1F,
                     green: ( bytes >> 5 ) & 0x1f,
-                    blue: ( bytes >> 10 ) & 0x1f
+                    blue: ( bytes >> 10 ) & 0x1f,
+                    transparency: bytes >> 15
                 }
                 const color = {
                     red: raw_color.red * 8,
@@ -55,10 +93,9 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
                     blue: raw_color.blue * 8
                 }
 
-                const coded = Jimp.rgbaToInt( color.red, color.green, color.blue, 255 )
                 colors.push( {
                     ...color,
-                    coded
+                    transparency: raw_color.transparency
                 } )
             }
 
@@ -113,12 +150,30 @@ module.exports.parseTIM = function( FILE = Buffer.alloc( 0 ) ) {
     }
 }
 
-module.exports.parsedTimToPngBuffer = function( TIM ) {
+module.exports.parsedTimToPngBuffer = function( TIM, transparency = 1 ) {
 
     const image = new Jimp( TIM.width_actual, TIM.height )
     TIM.pixels.forEach( ( pixel_row, y ) => {
         pixel_row.forEach( ( pixel, x ) => {
-            image.setPixelColor( pixel.coded, x, y )
+            let alpha = 255
+            if (
+                transparency === 1 && pixel.transparency === 0 &&
+                ( pixel.red === 0 && pixel.green === 0 && pixel.blue === 0 )
+            ) {
+                // alpha = 0
+            } else if ( transparency === 2 &&
+                ( pixel.red === 0 && pixel.green === 0 && pixel.blue === 0 )
+            ) {
+                // alpha = 0
+            } else if ( transparency === 3 && pixel.transparency === 1 ) {
+                const result = rgb2hsv( pixel.red, pixel.green, pixel.blue )
+                // alpha = 255 - 255 + ( result.v / 100 * 255 )
+            }
+
+
+            const coded = Jimp.rgbaToInt( pixel.red, pixel.green, pixel.blue, alpha )
+
+            image.setPixelColor( coded, x, y )
         } )
     } )
 

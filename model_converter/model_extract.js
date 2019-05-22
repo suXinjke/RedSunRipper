@@ -54,7 +54,7 @@ const faceTypes = {
     0x0A71: { size: 0x14 },
     0x0AB0: { size: 0x14 },
     0x0B24: { size: 0x16, quad: true },
-    0x0B65: { size: 0x16, quad: true },
+    0x0B65: { size: 0x16, quad: true, transparency: 3 },
     0x0B66: { size: 0x16, quad: true },
     0x0C34: { size: 0x18, quad: true },
     0x0C38: { size: 0x18 },
@@ -62,11 +62,11 @@ const faceTypes = {
     0x0C79: { size: 0x18 },
     0x0CB4: { size: 0x18, quad: true },
     0x0CB8: { size: 0x18 },
-    0x0F3C: { size: 0x1E, quad: true },
+    0x0F3C: { size: 0x1E, quad: true, transparency: 1 },
     0x0F7D: { size: 0x1E, quad: true },
     0x0FBC: { size: 0x1E, quad: true },
     0x4B24: { size: 0x16, quad: true },
-    0x4B65: { size: 0x16, quad: true },
+    0x4B65: { size: 0x16, quad: true, transparency: 2 },
     0x4920: { size: 0x12 },
     0x4961: { size: 0x12 },
     0x4C34: { size: 0x18, quad: true },
@@ -89,12 +89,13 @@ function parseFace( FILE = Buffer.alloc( 0 ), offset = 0 ) {
     if ( !faceType ) {
         throw new Error( `Unknown facetype: ${formatPointer( type )}\noffset: ${formatPointer( offset )}` )
     }
-    const { size, quad } = faceType
+    const { size, quad, transparency = 0 } = faceType
 
     const vertex_amount = quad ? 4 : 3
 
     return {
         type: formatPointer( type ),
+        transparency,
         offset: formatPointer( offset ),
 
         vertexes: [ ... new Array( vertex_amount ) ]
@@ -377,7 +378,8 @@ async function main() {
                 material_name: `tex_${index}`,
                 input_texture_file_path,
                 output_texture_file_path,
-                TIM
+                TIM,
+                transparency: 0
             }
         } ) )
 
@@ -451,7 +453,8 @@ async function main() {
 
                 let uv_index = uv_offset
 
-                const faces = [ ...mesh.faces ].sort( ( a, b ) => a.texture_index < b.texture_index ? -1 : 1 )
+                // const faces = [ ...mesh.faces ].sort( ( a, b ) => a.texture_index < b.texture_index ? -1 : 1 )
+                const faces = mesh.faces
 
                 let uv_string = ''
                 let face_string = ''
@@ -474,6 +477,10 @@ async function main() {
                             face_string += `usemtl ${material_name}\n`
 
                             last_texture_id = face.texture_index
+                        }
+
+                        if ( face.transparency > textures[face.texture_index].transparency ) {
+                            textures[face.texture_index].transparency = face.transparency
                         }
 
                         face_string += `f ${face.vertexes.map( ( v, index ) => `${v + 1 + vertex_offset}/${uv_index + index + 1}` ).join( ' ' )}\n`
@@ -508,7 +515,7 @@ async function main() {
                 materialFileContents += `newmtl ${texture.material_name}\n`
                 materialFileContents += `map_Kd ${texture.converted_texture_file_name}\n\n`
 
-                writeTasks.push( parsedTimToPngBuffer( texture.TIM )
+                writeTasks.push( parsedTimToPngBuffer( texture.TIM, texture.transparency )
                     .then( PNG_BUFFER => fs.writeFile( texture.output_texture_file_path, PNG_BUFFER ) )
                 )
             } )
