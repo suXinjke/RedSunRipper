@@ -1,5 +1,6 @@
 const fs = require( 'fs' ).promises
 const path = require( 'path' )
+const util = require( 'util' )
 const { parseTIM, parsedTimToPngBuffer } = require( './tim' )
 
 function formatPointer( num = 0 ) {
@@ -164,9 +165,22 @@ function parseMesh( FILE = Buffer.alloc( 0 ), offset = 0 ) {
     let face_offset = face_abs_pointer
     for ( let i = 0 ; i < face_amount ; i++ ) {
         const face = parseFace( FILE, face_offset )
+        face_offset += face.size
+
+        const previousFace = faces[faces.length - 1]
+        if ( previousFace ) {
+            const faceShortData = { vertexes: face.vertexes, uv: face.uv }
+            const previousFaceShortData = { vertexes: previousFace.vertexes, uv: previousFace.uv }
+
+            if ( util.isDeepStrictEqual( faceShortData, previousFaceShortData ) ) {
+                previousFace.blend_texture_index = previousFace.texture_index
+                previousFace.texture_index = face.texture_index
+                continue
+            }
+        }
 
         faces.push( face )
-        face_offset += face.size
+
     }
 
     return {
@@ -341,6 +355,9 @@ async function main() {
 
     const TIM_FILES = {}
 
+    /* TODO: separate parsing, texture loading (including putting it into cache) and file saving tasks.
+             The decision to dedeicate different material to similar faces with different textures led to messy
+             code for .mtl file generation and should be simplified. */
     Promise.all( models.map( async model => {
 
         let model_output_directory = output_directory
@@ -351,10 +368,7 @@ async function main() {
 
         const material_file_name = `${model.file_name}.mtl`
         const textures = no_textures ? [] : await Promise.all( model.data.texture_ids.map( async ( texture_id, index ) => {
-            const converted_texture_file_name = `${model.file_name}_tex_${index}.png`
-
             const input_texture_file_path = path.join( input_texture_directory, `TEX_${texture_id}.TIM` )
-            const output_texture_file_path = path.join( model_output_directory, converted_texture_file_name )
 
             let TIM = TIM_FILES[texture_id]
             if ( !TIM ) {
@@ -373,10 +387,7 @@ async function main() {
                 id: texture_id,
                 index,
                 original_texture_file_name: `TEX_${index}.TIM`,
-                converted_texture_file_name,
-                material_name: `tex_${index}`,
                 input_texture_file_path,
-                output_texture_file_path,
                 TIM
             }
         } ) )
@@ -451,7 +462,11 @@ async function main() {
 
                 let uv_index = uv_offset
 
-                const faces = [ ...mesh.faces ].sort( ( a, b ) => a.texture_index < b.texture_index ? -1 : 1 )
+                const faces = [ ...mesh.faces ].sort( ( a, b ) => {
+                    const texture_key1 = a.texture_index.toString() + ( ( a.blend_texture_index || -1 ).toString() )
+                    const texture_key2 = b.texture_index.toString() + ( ( b.blend_texture_index || -1 ).toString() )
+                    return texture_key1 < texture_key2 ? -1 : 1
+                } )
 
                 let uv_string = ''
                 let face_string = ''
@@ -469,11 +484,30 @@ async function main() {
                             return `vt ${x} ${y}`
                         } ).join( '\n' ) + '\n'
 
-                        if ( last_texture_id !== face.texture_index ) {
-                            const { material_name } = textures[face.texture_index]
-                            face_string += `usemtl ${material_name}\n`
+                        if ( face.blend_texture_index !== undefined ) {
+                            textures[face.blend_texture_index].additive = true
+                            if ( !textures[face.blend_texture_index].additive_parents ) {
+                                textures[face.blend_texture_index].additive_parents = []
+                            }
 
-                            last_texture_id = face.texture_index
+                            if ( !textures[face.blend_texture_index].additive_parents.includes( face.texture_index ) ) {
+                                textures[face.blend_texture_index].additive_parents.push( face.texture_index )
+                            }
+                        }
+
+                        const texture_key = face.texture_index.toString() + ( ( face.blend_texture_index || -1 ).toString() )
+
+                        if ( last_texture_id !== texture_key ) {
+                            const material_name = `tex_${face.texture_index}`
+                            face_string += `usemtl ${material_name}`
+
+                            if ( face.blend_texture_index !== undefined ) {
+                                face_string += `_additive`
+                            }
+
+                            face_string += '\n'
+
+                            last_texture_id = texture_key
                         }
 
                         face_string += `f ${face.vertexes.map( ( v, index ) => `${v + 1 + vertex_offset}/${uv_index + index + 1}` ).join( ' ' )}\n`
@@ -505,11 +539,26 @@ async function main() {
             let materialFileContents = ''
 
             textures.forEach( texture => {
-                materialFileContents += `newmtl ${texture.material_name}\n`
-                materialFileContents += `map_Kd ${texture.converted_texture_file_name}\n\n`
+                const converted_texture_file_name = `${model.file_name}_tex`
+
+                const output_texture_file_path = path.join(
+                    model_output_directory,
+                    `${converted_texture_file_name}_${texture.index}${texture.additive ? '_additive' : ''}.png`
+                )
+
+                if ( texture.additive ) {
+                    texture.additive_parents.forEach( parent_index => {
+                        materialFileContents += `newmtl tex_${parent_index}_additive\n`
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${parent_index}.png\n`
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}_additive.png\n`
+                    } )
+                } else {
+                    materialFileContents += `newmtl tex_${texture.index}\n`
+                    materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}.png\n`
+                }
 
                 writeTasks.push( parsedTimToPngBuffer( texture.TIM )
-                    .then( PNG_BUFFER => fs.writeFile( texture.output_texture_file_path, PNG_BUFFER ) )
+                    .then( PNG_BUFFER => fs.writeFile( output_texture_file_path, PNG_BUFFER ) )
                 )
             } )
 
