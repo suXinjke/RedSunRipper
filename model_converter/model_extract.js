@@ -172,7 +172,8 @@ function parseMesh( FILE = Buffer.alloc( 0 ), offset = 0 ) {
             const faceShortData = { vertexes: face.vertexes, uv: face.uv }
             const previousFaceShortData = { vertexes: previousFace.vertexes, uv: previousFace.uv }
 
-            if ( util.isDeepStrictEqual( faceShortData, previousFaceShortData ) ) {
+            // if ( util.isDeepStrictEqual( faceShortData, previousFaceShortData ) ) {
+            if ( util.isDeepStrictEqual( face.vertexes, previousFace.vertexes ) ) {
                 previousFace.blend_texture_index = previousFace.texture_index
                 previousFace.texture_index = face.texture_index
                 continue
@@ -495,6 +496,14 @@ async function main() {
                             }
                         }
 
+                        if (
+                            face.type === formatPointer( 0x0961 ) ||
+                            face.type === formatPointer( 0x0B65 ) ||
+                            face.type === formatPointer( 0x0C79 )
+                        ) {
+                            textures[face.texture_index].transparent = true
+                        }
+
                         const texture_key = face.texture_index.toString() + ( ( face.blend_texture_index || -1 ).toString() )
 
                         if ( last_texture_id !== texture_key ) {
@@ -543,7 +552,7 @@ async function main() {
 
                 const output_texture_file_path = path.join(
                     model_output_directory,
-                    `${converted_texture_file_name}_${texture.index}${texture.additive ? '_additive' : ''}.png`
+                    `${converted_texture_file_name}_${texture.index}${texture.additive ? '_additive' : ''}${texture.transparent ? '_transparent' : ''}.png`
                 )
 
                 if ( texture.additive ) {
@@ -554,7 +563,12 @@ async function main() {
                     } )
                 } else {
                     materialFileContents += `newmtl tex_${texture.index}\n`
-                    materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}.png\n`
+
+                    if ( texture.transparent ) {
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}_transparent.png\n`
+                    } else {
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}.png\n`
+                    }
                 }
 
                 writeTasks.push( parsedTimToPngBuffer( texture.TIM )
