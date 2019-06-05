@@ -169,12 +169,13 @@ function parseMesh( FILE = Buffer.alloc( 0 ), offset = 0 ) {
 
         const previousFace = faces[faces.length - 1]
         if ( previousFace ) {
-            const faceShortData = { vertexes: face.vertexes, uv: face.uv }
-            const previousFaceShortData = { vertexes: previousFace.vertexes, uv: previousFace.uv }
-
-            // if ( util.isDeepStrictEqual( faceShortData, previousFaceShortData ) ) {
             if ( util.isDeepStrictEqual( face.vertexes, previousFace.vertexes ) ) {
                 previousFace.blend_texture_index = previousFace.texture_index
+
+                if ( !util.isDeepStrictEqual( face.uv, previousFace.uv ) ) {
+                    previousFace.uv = face.uv
+                    // previousFace.blend_texture_uv = previousFace.uv
+                }
                 previousFace.texture_index = face.texture_index
                 continue
             }
@@ -475,15 +476,19 @@ async function main() {
                     if ( no_textures ) {
                         face_string += `f ${face.vertexes.map( v => v + 1 + vertex_offset ).join( ' ' )}\n`
                     } else {
-                        uv_string += face.uv.map( uv => {
-                            const { TIM } = textures[face.texture_index]
-                            const { width_actual, height } = TIM
+                        [ face.uv, face.blend_texture_uv ]
+                            .filter( uv => uv !== undefined )
+                            .forEach( uv_pack => {
+                                uv_string += uv_pack.map( uv => {
+                                    const { TIM } = textures[face.texture_index]
+                                    const { width_actual, height } = TIM
 
-                            const x = uv.x / width_actual
-                            const y = 1 - uv.y / height
+                                    const x = uv.x / width_actual
+                                    const y = 1 - uv.y / height
 
-                            return `vt ${x} ${y}`
-                        } ).join( '\n' ) + '\n'
+                                    return `vt ${x} ${y}`
+                                } ).join( '\n' ) + '\n'
+                            } )
 
                         if ( face.blend_texture_index !== undefined ) {
                             textures[face.blend_texture_index].additive = true
@@ -521,6 +526,9 @@ async function main() {
 
                         face_string += `f ${face.vertexes.map( ( v, index ) => `${v + 1 + vertex_offset}/${uv_index + index + 1}` ).join( ' ' )}\n`
                         uv_index += face.vertexes.length
+                        if ( face.blend_texture_uv ) {
+                            uv_index += face.blend_texture_uv.length
+                        }
                     }
                 }
 
