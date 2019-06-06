@@ -167,13 +167,41 @@ function parseMesh( FILE = Buffer.alloc( 0 ), offset = 0 ) {
         const face = parseFace( FILE, face_offset )
         face_offset += face.size
 
+        if (
+            face.type === formatPointer( 0x0961 ) ||
+            // face.type === formatPointer( 0x0B65 ) ||
+            face.type === formatPointer( 0x0C79 )
+        ) {
+            face.transparent = true
+        }
+
+
         const previousFace = faces[faces.length - 1]
         if ( previousFace ) {
-            const faceShortData = { vertexes: face.vertexes, uv: face.uv }
-            const previousFaceShortData = { vertexes: previousFace.vertexes, uv: previousFace.uv }
-
-            if ( util.isDeepStrictEqual( faceShortData, previousFaceShortData ) ) {
+            if ( util.isDeepStrictEqual( face.vertexes, previousFace.vertexes ) ) {
                 previousFace.blend_texture_index = previousFace.texture_index
+
+                // Heuristic to pick up one correct UV from two faces sharing the same set of vertexes.
+                // Sometimes UV values are inane and for now this is the only pattern I could rely on
+
+                if ( face.uv.every( ( { x, y }, index ) => {
+                    const x2 = previousFace.uv[index].x || 0.000000000000000001
+                    const y2 = previousFace.uv[index].y || 0.000000000000000001
+
+                    const frac1 = x / x2
+                    const frac2 = y / y2
+
+                    return (
+                        frac1 === 0 || ( 1 <= frac1 && frac1 <= 2.1 ) &&
+                        frac2 === 0 || ( 1 <= frac2 && frac2 <= 2.1 )
+                    )
+                } ) ) {
+                    previousFace.uv = face.uv
+                }
+
+                // if ( !util.isDeepStrictEqual( face.uv, previousFace.uv ) ) {
+                //     previousFace.uv = face.uv
+                // }
                 previousFace.texture_index = face.texture_index
                 continue
             }
@@ -463,8 +491,8 @@ async function main() {
                 let uv_index = uv_offset
 
                 const faces = [ ...mesh.faces ].sort( ( a, b ) => {
-                    const texture_key1 = a.texture_index.toString() + ( ( a.blend_texture_index || -1 ).toString() )
-                    const texture_key2 = b.texture_index.toString() + ( ( b.blend_texture_index || -1 ).toString() )
+                    const texture_key1 = a.texture_index.toString() + ( ( a.blend_texture_index || '-' ).toString() ) + ( ( !a.transparent || '-' ).toString() )
+                    const texture_key2 = b.texture_index.toString() + ( ( b.blend_texture_index || '-' ).toString() ) + ( ( !b.transparent || '-' ).toString() )
                     return texture_key1 < texture_key2 ? -1 : 1
                 } )
 
@@ -495,14 +523,29 @@ async function main() {
                             }
                         }
 
-                        const texture_key = face.texture_index.toString() + ( ( face.blend_texture_index || -1 ).toString() )
+                        // if (
+                        //     face.type === formatPointer( 0x0961 ) ||
+                        //     face.type === formatPointer( 0x0B65 ) ||
+                        //     face.type === formatPointer( 0x0C79 )
+                        // ) {
+                        //     textures[face.texture_index].transparent = true
+                        // }
+                        if ( face.transparent ) {
+                            textures[face.texture_index].transparent = true
+                        }
+
+                        const texture_key = face.texture_index.toString() + ( ( face.blend_texture_index || -1 ).toString() ) + ( ( textures[face.texture_index].transparent || -2 ).toString() )
 
                         if ( last_texture_id !== texture_key ) {
                             const material_name = `tex_${face.texture_index}`
                             face_string += `usemtl ${material_name}`
 
+                            // console.log( { material_name, face } )
+
                             if ( face.blend_texture_index !== undefined ) {
                                 face_string += `_additive`
+                            } else if ( textures[face.texture_index].transparent ) {
+                                face_string += `_transparent`
                             }
 
                             face_string += '\n'
@@ -543,7 +586,7 @@ async function main() {
 
                 const output_texture_file_path = path.join(
                     model_output_directory,
-                    `${converted_texture_file_name}_${texture.index}${texture.additive ? '_additive' : ''}.png`
+                    `${converted_texture_file_name}_${texture.index}${texture.additive ? '_additive' : ''}${texture.transparent ? '_transparent' : ''}.png`
                 )
 
                 if ( texture.additive ) {
@@ -553,8 +596,17 @@ async function main() {
                         materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}_additive.png\n`
                     } )
                 } else {
-                    materialFileContents += `newmtl tex_${texture.index}\n`
-                    materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}.png\n`
+                    if ( texture.transparent ) {
+                        materialFileContents += `newmtl tex_${texture.index}_transparent\n`
+                    } else {
+                        materialFileContents += `newmtl tex_${texture.index}\n`
+                    }
+
+                    if ( texture.transparent ) {
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}_transparent.png\n`
+                    } else {
+                        materialFileContents += `map_Kd ${converted_texture_file_name}_${texture.index}.png\n`
+                    }
                 }
 
                 writeTasks.push( parsedTimToPngBuffer( texture.TIM )
